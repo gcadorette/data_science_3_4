@@ -7,6 +7,7 @@ USER_FILE_PATH = "data/u.user"
 BASE_FILE_PATH = "data/u_.base"
 TEST_FILE_PATH = "data/u_.test"
 EPSILON = 0.2  # seuil de convergence
+FILENAME = "results" + str(time.time()) + ".csv"
 
 
 class Rating:
@@ -14,6 +15,17 @@ class Rating:
         self.user = int(user)
         self.film = int(film)
         self.rating = int(rating)
+        self.categoryRating = 0
+        if 2 >= self.rating >= 0:
+            self.categoryRating = 1
+        elif self.rating == 3:
+            self.categoryRating = 2
+        else:
+            self.categoryRating = 3
+
+
+def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
+    pass
 
 
 def kmeans(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
@@ -96,7 +108,8 @@ def kmeans(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
 
 
 if __name__ == "__main__":
-
+    with open(FILENAME, "w") as file:
+        file.write("Cluster,Fichier,Manquants,Moyenne,Variance")
     ratings = []
     for i in range(1, 6):
         with open(BASE_FILE_PATH.replace("_", str(i))) as f:
@@ -150,9 +163,13 @@ if __name__ == "__main__":
                     estimatedRatings.append((trueRating.rating, calculatedRatings))
             print(time.process_time() - beg)
             removedClutter = [x for x in estimatedRatings if x[1] != -1]
-            print("{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRatings) - len(removedClutter)))
+            print("{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRatings) - len(
+                removedClutter)))
             avg = sum([abs(true - calculated) for true, calculated in removedClutter]) / len(removedClutter)
-            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutter]) / (len(removedClutter) - 1)
+            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutter]) / (
+                        len(removedClutter) - 1)
             print("moyenne de {} et variance de {}\n".format(avg, variance))
+            with open(FILENAME, "a") as file:
+                file.write("{},{},{},{},{}\n".format(k, i, len(estimatedRatings) - len(removedClutter), avg, variance))
             # traitement avec l'autre
     print("me:)")
