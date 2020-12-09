@@ -45,6 +45,109 @@ def getMode(modes):
     return mode
 
 
+def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
+    print("method3 :)")
+    weights = []
+    clusters, clustersMid, midValues = initialiseClusters(amtOfClusters, values)
+    #creer une matrice 2d de taille amtclusters * amtfilms
+    for _ in range(amtOfClusters):
+        filmWeights = {}
+        for film in filmsInFile:
+            filmWeights[film] = 1 / len(filmsInFile)
+        weights.append(filmWeights)
+    changed = True
+    amtOfIterations = 0
+    while changed:
+        changed = False
+        for user in usersInFile:
+            minDist = 2**31
+            bestCl = -1
+            userIndBeg = usersMap[user][0]
+            for cl in range(amtOfClusters):
+                distSum = 0
+                if clustersMid[cl] != user and user not in clustersMid:
+                    ind = usersMap[user][0]
+                    while ind < len(values) and values[ind].user == user:
+                        distSum += sum([weights[cl][x.film] * (values[ind].rating - x.rating) ** 2 for x in midValues[cl] if
+                                      x.film == values[ind].film])
+                        ind += 1
+
+                distSum = distSum ** (1/2)
+                if distSum < minDist:
+                    minDist = distSum
+                    bestCL = cl
+
+            for cl in range(amtOfClusters):
+                if user in clusters[cl]:
+                    clusters[cl].remove(user)
+                    break
+            clusters[bestCL].append(user)
+
+        #change the weights
+        weightsForAdjustements = []
+        for cl in range(amtOfClusters):
+            weightsForAdjustements.append({})
+            for user in clusters[cl]:
+                if user != clustersMid[cl]:
+                    for i in range(usersMap[user][0], usersMap[user][1] + 1):
+                        if values[i].film in weightsForAdjustements[cl].keys():
+                            weightsForAdjustements[cl][values[i].film].append(values[i].rating)
+                        else:
+                            weightsForAdjustements[cl][values[i].film] = [values[i].rating]
+        #normalize the weights
+        sumPerCl = []
+        amtPerCl = []
+        avgPerCl = []
+        for cl, weightsAdjustments in enumerate(weightsForAdjustements):
+            sumPerCl.append(0)
+            amtPerCl.append(0)
+            for film, entries in weightsAdjustments.items():
+                if entries:
+                    avg = sum(entries) / len(entries)
+                    variance = sum([(avg - entry) ** 2 for entry in entries]) / (len(entries))
+                    weights[cl][film] = weights[cl][film] / (1 + variance)
+                    sumPerCl[cl] += weights[cl][film] ** 2
+                    amtPerCl[cl] += 1
+
+        for cl in range(amtOfClusters):
+            if amtPerCl[cl] == 0:
+                amtPerCl[cl] = 1
+            avgPerCl.append(sumPerCl[cl] / amtPerCl[cl])
+            for film in filmsInFile:
+                if sumPerCl[cl] == 0:
+                    sumPerCl[cl] = 1
+                weights[cl][film] = weights[cl][film] / (sumPerCl[cl] ** 1/2)
+
+        for cl in range(amtOfClusters):
+            prevMid = clustersMid[cl]
+            midRatings = [x.rating * weights[cl][x.film] for x in midValues[cl]]
+            midAvg = sum(midRatings) / len(midRatings)
+            midDiff = abs(avgPerCl[cl] - midAvg)
+            mid = clustersMid[cl]
+            for user in clusters[cl]:
+                if user != clustersMid[cl]:
+                    userRatings = [x.rating * weights[cl][x.film] for x in values[usersMap[user][0]: usersMap[user][1]]]
+                    userAvg = sum(userRatings) / len(userRatings)
+                    diff = abs(avgPerCl[cl] - userAvg)
+                    if diff < midDiff and abs(diff - midDiff) > EPSILON:
+                        mid = user
+                        midDiff = diff
+            if mid != prevMid:
+                midValues[cl] = [x for x in values[usersMap[mid][0]: usersMap[mid][1]]]
+                clustersMid[cl] = mid
+                changed = True
+                for cl in range(amtOfClusters):
+                    if mid in clusters[cl]:
+                        clusters[cl].remove(mid)
+                clusters[cl].append(mid)
+        amtOfIterations += 1
+    return clusters, clustersMid, weights
+
+
+
+
+
+
 def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     clusters, clustersMid, midValues = initialiseClusters(amtOfClusters, values)
     changed = True
@@ -58,13 +161,15 @@ def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                 if clustersMid[clusterInd] != user and user not in clustersMid:
                     diff = 0
                     ind = usersMap[user][0]
-                    midRatings = [0 if values[ind].categoryRating == x.categoryRating else 1 for x in midValues[clusterInd] if
-                                  x.film == values[ind].film]
-                    if midRatings:
-                        diff += sum(midRatings) / len(midRatings)
-                        if diff < minDiff:
-                            chosenCluster = clusterInd
-                            minDiff = diff
+                    while ind < len(values) and values[ind].user == user:
+                        midRatings = [0 if values[ind].categoryRating == x.categoryRating else 1 for x in midValues[clusterInd] if
+                                      x.film == values[ind].film]
+                        if midRatings:
+                            diff += sum(midRatings) / len(midRatings)
+                        ind += 1
+                    if 0 < diff < minDiff:
+                        chosenCluster = clusterInd
+                        minDiff = diff
             for cl in range(amtOfClusters):
                 if user in clusters[cl]:
                     clusters[cl].remove(user)
@@ -99,7 +204,6 @@ def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                     filmRatings = [0 if x.categoryRating == mode else 1 for x in values[usersMap[user][0]: usersMap[user][1]]]
                     dist = sum(filmRatings) / len(filmRatings)
                     if dist < diffMid and abs(dist - diffMid) > EPSILON:
-                        print("{} - {} = {}".format(dist, diffMid, abs(dist - diffMid)))
                         diffMid = dist
                         bestMid = user
             if bestMid != prevMid:
@@ -111,7 +215,6 @@ def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                         clusters[cl].remove(bestMid)
                 clusters[clusterInd].append(bestMid)
         amtOfIterations += 1
-        print("***********" + str(amtOfIterations) + "************")
     return clusters, clustersMid
 
 
@@ -216,11 +319,13 @@ if __name__ == "__main__":
                 lineNbr += 1
             usersMap[user].append(lineNbr - 1)
         k = 15
+        clusters3, clustersMid3, weights = method3(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         clusters, clustersMid = kmeans(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         clustersMod, clustersMidMod = kmode(k, ratings[-1], usersInFile, filmsInFile, usersMap)
-        print("Finished clustering!")
+        print("Finished clustering for file {}".format(i))
         estimatedRatingskmeans = []
         estimatedRatingskmode = []
+        estimatedRating3 = []
         with open(TEST_FILE_PATH.replace("_", str(i))) as f:
             beg = time.process_time()
             for line in f:
@@ -229,31 +334,88 @@ if __name__ == "__main__":
                 sumScore = 0
                 amtUsers = 0
                 clusterIndex = -1
+                clusterIndexMod = -1
+                clusterIndex3 = -1
+                """
                 for index, cl in enumerate(clusters):
                     if next((x for x in cl if x == trueRating.user), None):
                         clusterIndex = index
+                
+
+                for index, cl in enumerate(clustersMod):
+                    if next((x for x in cl if x == trueRating.user), None):
+                        clusterIndexMod = index
+                """
+                for index, cl in enumerate(clusters3):
+                    if next((x for x in cl if x == trueRating.user), None):
+                        clusterIndex3 = index
                 sumRatings = 0
                 amt = 0
-                # TODO: le faire pour kmode
                 # For kmeans
+                modes = [0, 0, 0]
+                sumRatings3 = 0
                 for user, lines in usersMap.items():
+                    """
                     if user in clusters[clusterIndex]:
                         for l in range(lines[0], lines[1]):
-                            sumRatings += ratings[-1][l].rating
-                            amt += 1
+                            if ratings[-1][l].film == trueRating.film:
+                                sumRatings += ratings[-1][l].rating
+                                amt += 1
+                    
+                #for kmode
+                    if user in clustersMod[clusterIndexMod]:
+                        for l in range(lines[0], lines[1]):
+                            if ratings[-1][l].film == trueRating.film:
+                                modes[ratings[-1][l].categoryRating - 1] += 1
+                    """
+
+                #for method3
+                    if user in clusters3[clusterIndex3]:
+                        for l in range(lines[0], lines[1]):
+                            if ratings[-1][l].film == trueRating.film:
+                                sumRatings3 += ratings[-1][l].rating
+                                amt += 1
+
+
                 calculatedRatings = -1
+                mode = -1
+                calculatedRatings3 = -1
                 if sumRatings > 0:
                     calculatedRatings = sumRatings / amt
-                estimatedRatingskmeans.append((trueRating.rating, calculatedRatings))
+                if any([x > 0 for x in modes]):
+                    mode = getMode(modes)
+                if sumRatings3 > 0:
+                    calculatedRatings3 = sumRatings3 / amt
+                # estimatedRatingskmeans.append((trueRating.rating, calculatedRatings))
+                # estimatedRatingskmode.append((trueRating.categoryRating, mode))
+                estimatedRating3.append((trueRating.categoryRating, calculatedRatings3))
             print(time.process_time() - beg)
-            removedClutter = [x for x in estimatedRatingskmeans if x[1] != -1]
+            # removedClutterkmeans = [x for x in estimatedRatingskmeans if x[1] != -1]
+            removedClutterkmode = [x for x in estimatedRatingskmode if x[1] != -1]
+            removedClutter3 = [x for x in estimatedRating3 if x[1] != -1]
+            """
+            print("******KMEANS*******")
             print("{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRatingskmeans) - len(
-                removedClutter)))
-            avg = sum([abs(true - calculated) for true, calculated in removedClutter]) / len(removedClutter)
-            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutter]) / (
-                    len(removedClutter) - 1)
+                removedClutterkmeans)))
+            avg = sum([abs(true - calculated) for true, calculated in removedClutterkmeans]) / len(removedClutterkmeans)
+            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutterkmeans]) / (
+                    len(removedClutterkmeans) - 1)
             print("moyenne de {} et variance de {}\n".format(avg, variance))
-            # with open(FILENAME, "a") as file:
-             #    file.write("{},{},{},{},{}\n".format(k, i, len(estimatedRatings) - len(removedClutter), avg, variance))
-            # traitement avec l'autre
-    print("me:)")
+            
+            print("*******KMODE*********")
+            print("{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRatingskmode) - len(
+                    removedClutterkmode)))
+            avg = sum([abs(true - calculated) for true, calculated in removedClutterkmode]) / len(removedClutterkmode)
+            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutterkmode]) / (
+                    len(removedClutterkmode) - 1)
+            print("moyenne de {} et variance de {}\n".format(avg, variance))
+            """
+
+            print("*******METHODE 3*********")
+            print(
+                "{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRating3) - len(
+                    removedClutter3)))
+            avg = sum([abs(true - calculated) for true, calculated in removedClutter3]) / len(removedClutter3)
+            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutter3]) / (
+                    len(removedClutter3) - 1)
+            print("moyenne de {} et variance de {}\n".format(avg, variance))
