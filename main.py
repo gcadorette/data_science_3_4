@@ -35,9 +35,10 @@ def initialiseClusters(amtOfClusters, values):
         midValues.append([x for x in values if x.user == clustersMid[ind]])
     return clusters, clustersMid, midValues
 
+
 def getMode(modes):
     mode = -1
-    modeVal = 2**31
+    modeVal = 2 ** 31
     for ind, m in enumerate(modes):
         if m < modeVal:
             modeVal = m
@@ -45,11 +46,29 @@ def getMode(modes):
     return mode
 
 
+def nearestNeighbors(values, usersInFile, usersMap):
+    nearestNeighbor = {}
+    for user in usersInFile:
+        entries = {}
+        userRatings = [x for x in values[usersMap[user][0]: usersMap[user][1]]]
+        for otherUser in usersInFile:
+            if otherUser != user:
+                entries[otherUser] = []
+                for rating in userRatings:
+                    othersRating = next(
+                        (x for x in values[usersMap[otherUser][0]: usersMap[otherUser][1]] if x.film == rating.film),
+                        None)
+                    if othersRating:
+                        entries[otherUser].append(abs(othersRating.rating - rating.rating))
+        nearestNeighbor[user] = entries
+    return nearestNeighbor
+
+
 def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     print("method3 :)")
     weights = []
     clusters, clustersMid, midValues = initialiseClusters(amtOfClusters, values)
-    #creer une matrice 2d de taille amtclusters * amtfilms
+    # creer une matrice 2d de taille amtclusters * amtfilms
     for _ in range(amtOfClusters):
         filmWeights = {}
         for film in filmsInFile:
@@ -60,7 +79,7 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     while changed:
         changed = False
         for user in usersInFile:
-            minDist = 2**31
+            minDist = 2 ** 31
             bestCl = -1
             userIndBeg = usersMap[user][0]
             for cl in range(amtOfClusters):
@@ -68,11 +87,12 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                 if clustersMid[cl] != user and user not in clustersMid:
                     ind = usersMap[user][0]
                     while ind < len(values) and values[ind].user == user:
-                        distSum += sum([weights[cl][x.film] * (values[ind].rating - x.rating) ** 2 for x in midValues[cl] if
-                                      x.film == values[ind].film])
+                        distSum += sum(
+                            [weights[cl][x.film] * (values[ind].rating - x.rating) ** 2 for x in midValues[cl] if
+                             x.film == values[ind].film])
                         ind += 1
 
-                distSum = distSum ** (1/2)
+                distSum = distSum ** (1 / 2)
                 if distSum < minDist:
                     minDist = distSum
                     bestCL = cl
@@ -83,7 +103,7 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                     break
             clusters[bestCL].append(user)
 
-        #change the weights
+        # change the weights
         weightsForAdjustements = []
         for cl in range(amtOfClusters):
             weightsForAdjustements.append({})
@@ -94,7 +114,7 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                             weightsForAdjustements[cl][values[i].film].append(values[i].rating)
                         else:
                             weightsForAdjustements[cl][values[i].film] = [values[i].rating]
-        #normalize the weights
+        # normalize the weights
         sumPerCl = []
         amtPerCl = []
         avgPerCl = []
@@ -116,7 +136,7 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
             for film in filmsInFile:
                 if sumPerCl[cl] == 0:
                     sumPerCl[cl] = 1
-                weights[cl][film] = weights[cl][film] / (sumPerCl[cl] ** 1/2)
+                weights[cl][film] = weights[cl][film] / (sumPerCl[cl] ** 1 / 2)
 
         for cl in range(amtOfClusters):
             prevMid = clustersMid[cl]
@@ -144,10 +164,6 @@ def method3(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     return clusters, clustersMid, weights
 
 
-
-
-
-
 def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     clusters, clustersMid, midValues = initialiseClusters(amtOfClusters, values)
     changed = True
@@ -162,7 +178,8 @@ def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                     diff = 0
                     ind = usersMap[user][0]
                     while ind < len(values) and values[ind].user == user:
-                        midRatings = [0 if values[ind].categoryRating == x.categoryRating else 1 for x in midValues[clusterInd] if
+                        midRatings = [0 if values[ind].categoryRating == x.categoryRating else 1 for x in
+                                      midValues[clusterInd] if
                                       x.film == values[ind].film]
                         if midRatings:
                             diff += sum(midRatings) / len(midRatings)
@@ -194,14 +211,15 @@ def kmode(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                     amtMovies += 1
 
             bestMid = clustersMid[clusterInd]
-            modeVal = 2**31
+            modeVal = 2 ** 31
             mode = getMode(modes)
 
             ratingsMid = [0 if x.categoryRating == mode else 1 for x in midValues[clusterInd]]
             diffMid = sum(ratingsMid) / len(ratingsMid)
             for user in clusters[clusterInd]:
                 if user != clustersMid[clusterInd]:
-                    filmRatings = [0 if x.categoryRating == mode else 1 for x in values[usersMap[user][0]: usersMap[user][1]]]
+                    filmRatings = [0 if x.categoryRating == mode else 1 for x in
+                                   values[usersMap[user][0]: usersMap[user][1]]]
                     dist = sum(filmRatings) / len(filmRatings)
                     if dist < diffMid and abs(dist - diffMid) > EPSILON:
                         diffMid = dist
@@ -319,9 +337,24 @@ if __name__ == "__main__":
                 lineNbr += 1
             usersMap[user].append(lineNbr - 1)
         k = 15
+        """
         clusters3, clustersMid3, weights = method3(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         clusters, clustersMid = kmeans(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         clustersMod, clustersMidMod = kmode(k, ratings[-1], usersInFile, filmsInFile, usersMap)
+        """
+        test = {}
+        test["a"] = 3
+        test["b"] = 2
+        test["c"] = 1
+        print(sorted(test.items(), key=lambda x: x[1]))
+        neighbors = nearestNeighbors(ratings[-1], usersInFile, usersMap)
+        sortedEntries = {}
+        maxNeighbors = 500
+        for user, entries in neighbors.items():
+            if len(entries.items()[1]) > 0:
+                sortedEntries[user] = sorted(entries.items(), key=lambda x: sum(x[1]) / len(x[1]))[:maxNeighbors]
+            else:
+                print(user)
         print("Finished clustering for file {}".format(i))
         estimatedRatingskmeans = []
         estimatedRatingskmode = []
@@ -345,10 +378,11 @@ if __name__ == "__main__":
                 for index, cl in enumerate(clustersMod):
                     if next((x for x in cl if x == trueRating.user), None):
                         clusterIndexMod = index
-                """
+                
                 for index, cl in enumerate(clusters3):
                     if next((x for x in cl if x == trueRating.user), None):
                         clusterIndex3 = index
+                """
                 sumRatings = 0
                 amt = 0
                 # For kmeans
@@ -369,13 +403,12 @@ if __name__ == "__main__":
                                 modes[ratings[-1][l].categoryRating - 1] += 1
                     """
 
-                #for method3
+                    # for method3
                     if user in clusters3[clusterIndex3]:
                         for l in range(lines[0], lines[1]):
                             if ratings[-1][l].film == trueRating.film:
                                 sumRatings3 += ratings[-1][l].rating
                                 amt += 1
-
 
                 calculatedRatings = -1
                 mode = -1
