@@ -47,20 +47,31 @@ def getMode(modes):
 
 
 def nearestNeighbors(values, usersInFile, usersMap):
+    beg = time.process_time()
+    entriesPerUsers = {}
+    for user in usersInFile:
+        entriesPerUsers[user] = [x for x in values[usersMap[user][0]: usersMap[user][1]]]
     nearestNeighbor = {}
     for user in usersInFile:
         entries = {}
-        userRatings = [x for x in values[usersMap[user][0]: usersMap[user][1]]]
         for otherUser in usersInFile:
             if otherUser != user:
-                entries[otherUser] = []
-                for rating in userRatings:
-                    othersRating = next(
-                        (x for x in values[usersMap[otherUser][0]: usersMap[otherUser][1]] if x.film == rating.film),
-                        None)
-                    if othersRating:
-                        entries[otherUser].append(abs(othersRating.rating - rating.rating))
+                if otherUser not in nearestNeighbor.keys():
+                    neighbors = []
+                    for rating in entriesPerUsers[user]:
+                        othersRating = None
+                        for r in entriesPerUsers[otherUser]:
+                            if r.film == rating.film:
+                                othersRating = r
+                                break
+                        if othersRating:
+                            neighbors.append(abs(othersRating.rating - rating.rating))
+                    if neighbors:
+                        entries[otherUser] = neighbors
+                elif user in nearestNeighbor[otherUser].keys() and nearestNeighbor[otherUser][user] :
+                    entries[otherUser] = nearestNeighbor[otherUser][user]
         nearestNeighbor[user] = entries
+    print(time.process_time() - beg)
     return nearestNeighbor
 
 
@@ -242,6 +253,7 @@ def kmeans(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
     amtOfIterations = 0
     while changed and amtOfIterations < 10:
         changed = False
+        # deplacement de mes usagers dans les clusters appropries
         for user in usersInFile:
             minDiff = 2 ** 31
             chosenCluster = -1
@@ -265,6 +277,7 @@ def kmeans(amtOfClusters, values, usersInFile, filmsInFile, usersMap):
                     break
             clusters[chosenCluster].append(user)
         amtChanged = 0
+        # deplacement des centroides
         for clusterInd in range(amtOfClusters):
             if len(clusters[clusterInd]) <= 1:
                 continue
@@ -342,16 +355,11 @@ if __name__ == "__main__":
         clusters, clustersMid = kmeans(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         clustersMod, clustersMidMod = kmode(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         """
-        test = {}
-        test["a"] = 3
-        test["b"] = 2
-        test["c"] = 1
-        print(sorted(test.items(), key=lambda x: x[1]))
         neighbors = nearestNeighbors(ratings[-1], usersInFile, usersMap)
         sortedEntries = {}
-        maxNeighbors = 500
+        maxNeighbors = 20
         for user, entries in neighbors.items():
-            if len(entries.items()[1]) > 0:
+            if entries:
                 sortedEntries[user] = sorted(entries.items(), key=lambda x: sum(x[1]) / len(x[1]))[:maxNeighbors]
             else:
                 print(user)
@@ -359,6 +367,7 @@ if __name__ == "__main__":
         estimatedRatingskmeans = []
         estimatedRatingskmode = []
         estimatedRating3 = []
+        estimatedUserRatings = []
         with open(TEST_FILE_PATH.replace("_", str(i))) as f:
             beg = time.process_time()
             for line in f:
@@ -385,11 +394,12 @@ if __name__ == "__main__":
                 """
                 sumRatings = 0
                 amt = 0
-                # For kmeans
                 modes = [0, 0, 0]
                 sumRatings3 = 0
+                userBasedRatings = []
                 for user, lines in usersMap.items():
                     """
+                    # For kmeans
                     if user in clusters[clusterIndex]:
                         for l in range(lines[0], lines[1]):
                             if ratings[-1][l].film == trueRating.film:
@@ -401,7 +411,7 @@ if __name__ == "__main__":
                         for l in range(lines[0], lines[1]):
                             if ratings[-1][l].film == trueRating.film:
                                 modes[ratings[-1][l].categoryRating - 1] += 1
-                    """
+                    
 
                     # for method3
                     if user in clusters3[clusterIndex3]:
@@ -409,23 +419,37 @@ if __name__ == "__main__":
                             if ratings[-1][l].film == trueRating.film:
                                 sumRatings3 += ratings[-1][l].rating
                                 amt += 1
+                    """
+                # for method 4
+                for user, entry in sortedEntries[trueRating.user]:
+                    othersRating = next(
+                        (x for x in ratings[-1][usersMap[user][0]: usersMap[user][1]] if
+                         x.film == trueRating.film),
+                        None)
+                    if othersRating:
+                        userBasedRatings.append(othersRating.rating)
 
                 calculatedRatings = -1
                 mode = -1
                 calculatedRatings3 = -1
+                calculatedUserRatings = -1
                 if sumRatings > 0:
                     calculatedRatings = sumRatings / amt
                 if any([x > 0 for x in modes]):
                     mode = getMode(modes)
                 if sumRatings3 > 0:
                     calculatedRatings3 = sumRatings3 / amt
+                if userBasedRatings:
+                    calculatedUserRatings = round(sum(userBasedRatings) / len(userBasedRatings), 0)
                 # estimatedRatingskmeans.append((trueRating.rating, calculatedRatings))
                 # estimatedRatingskmode.append((trueRating.categoryRating, mode))
-                estimatedRating3.append((trueRating.categoryRating, calculatedRatings3))
+                # estimatedRating3.append((trueRating.categoryRating, calculatedRatings3))
+                estimatedUserRatings.append((trueRating.categoryRating, calculatedUserRatings))
             print(time.process_time() - beg)
             # removedClutterkmeans = [x for x in estimatedRatingskmeans if x[1] != -1]
-            removedClutterkmode = [x for x in estimatedRatingskmode if x[1] != -1]
-            removedClutter3 = [x for x in estimatedRating3 if x[1] != -1]
+            # removedClutterkmode = [x for x in estimatedRatingskmode if x[1] != -1]
+            # removedClutter3 = [x for x in estimatedRating3 if x[1] != -1]
+            removedClutterUserRating = [x for x in estimatedUserRatings if x[1] != -1]
             """
             print("******KMEANS*******")
             print("{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRatingskmeans) - len(
@@ -444,6 +468,7 @@ if __name__ == "__main__":
             print("moyenne de {} et variance de {}\n".format(avg, variance))
             """
 
+            """
             print("*******METHODE 3*********")
             print(
                 "{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedRating3) - len(
@@ -451,4 +476,13 @@ if __name__ == "__main__":
             avg = sum([abs(true - calculated) for true, calculated in removedClutter3]) / len(removedClutter3)
             variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutter3]) / (
                     len(removedClutter3) - 1)
+            print("moyenne de {} et variance de {}\n".format(avg, variance))
+            """
+            print("*******NEAREST NEIGHBOR*********")
+            print(
+                "{} clusters pour le fichier {}: {} manquants sur 20000".format(k, i, len(estimatedUserRatings) - len(
+                    removedClutterUserRating)))
+            avg = sum([abs(true - calculated) for true, calculated in removedClutterUserRating]) / len(removedClutterUserRating)
+            variance = sum([(avg - abs(true - calculated)) ** 2 for true, calculated in removedClutterUserRating]) / (
+                    len(removedClutterUserRating) - 1)
             print("moyenne de {} et variance de {}\n".format(avg, variance))
