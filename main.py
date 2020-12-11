@@ -349,7 +349,7 @@ if __name__ == "__main__":
         clustersMod, clustersMidMod = kmode(k, ratings[-1], usersInFile, filmsInFile, usersMap)
         neighbors = nearestNeighbors(ratings[-1], usersInFile, usersMap)
         sortedEntries = {}
-        maxNeighbors = 20
+        maxNeighbors = 500
         for user, entries in neighbors.items():
             if entries:
                 sortedEntries[user] = sorted(entries.items(), key=lambda x: sum(x[1]) / len(x[1]))[:maxNeighbors]
